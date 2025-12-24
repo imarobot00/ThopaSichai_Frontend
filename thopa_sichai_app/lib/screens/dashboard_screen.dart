@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'device_list_screen.dart';
 import 'soil_moisture_screen.dart';
+import 'history_screen.dart';
+import 'settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -35,9 +37,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+            icon: const Icon(Icons.history, color: Colors.white),
             onPressed: () {
-              // TODO: Navigate to notifications
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const HistoryScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
             },
           ),
         ],
@@ -98,16 +116,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Expanded(
                         child: _buildQuickStat(
-                          'Active Devices',
-                          '3',
-                          Icons.devices_outlined,
+                          'Active Sensors',
+                          '2',
+                          Icons.sensors_outlined,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _buildQuickStat(
-                          'Running',
-                          '1',
+                          'Avg Moisture',
+                          '85%',
                           Icons.water_drop_outlined,
                         ),
                       ),
@@ -118,90 +136,149 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Environmental Data
+            // Soil Moisture Overview
+            const Text(
+              'Soil Moisture Monitoring',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SoilMoistureScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E88E5), Color(0xFF1565C0)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Current Level',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Loading...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Tap to view details',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.water_drop,
+                        color: Colors.white,
+                        size: 48,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Pump Control
             Row(
               children: [
                 const Text(
-                  'Environmental Data',
+                  'Irrigation Control',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    // TODO: Navigate to all environmental data
-                  },
-                  child: const Text(
-                    'View All',
-                    style: TextStyle(color: Color(0xFF7DC2FF)),
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SoilMoistureScreen(),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF212529),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Water Pump',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
                         ),
-                      );
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _pumpStatus ? 'Running' : 'Stopped',
+                        style: TextStyle(
+                          color: _pumpStatus ? const Color(0xFF82E0AA) : Colors.white54,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Switch(
+                    value: _pumpStatus,
+                    onChanged: (value) {
+                      setState(() {
+                        _pumpStatus = value;
+                      });
                     },
-                    child: _buildEnvironmentCard(
-                      'Soil Moisture',
-                      '65%',
-                      Icons.water_outlined,
-                      const Color(0xFF7DC2FF),
-                    ),
+                    activeColor: const Color(0xFF82E0AA),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildEnvironmentCard(
-                    'Temperature',
-                    '28°C',
-                    Icons.thermostat_outlined,
-                    const Color(0xFFFFB088),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildEnvironmentCard(
-                    'Humidity',
-                    '72%',
-                    Icons.opacity_outlined,
-                    const Color(0xFF82E0AA),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildEnvironmentCard(
-                    'Light',
-                    '850 lux',
-                    Icons.wb_sunny_outlined,
-                    const Color(0xFFFFD966),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 24),
 
-            // My Devices Section
+            // Sensor Nodes Section
             Row(
               children: [
                 const Text(
-                  'My Devices',
+                  'Sensor Nodes',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -227,17 +304,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
             _buildDeviceCard(
-              'Backyard Garden',
-              'Zone 1 • Active',
+              'ESP32_001',
+              'Zone A • Active',
               true,
-              Icons.grass_outlined,
+              Icons.sensors_outlined,
             ),
             const SizedBox(height: 12),
             _buildDeviceCard(
-              'Front Lawn Sprinkler',
-              'Zone 2 • Idle',
+              'ESP32_002',
+              'Zone B • Idle',
               false,
-              Icons.water_drop_outlined,
+              Icons.sensors_outlined,
             ),
           ],
         ),
@@ -249,7 +326,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: const Color(0xFF82E0AA),
         icon: const Icon(Icons.add, color: Colors.black),
         label: const Text(
-          'Add Device',
+          'Add Sensor',
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -287,55 +364,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildEnvironmentCard(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const SoilMoistureScreen(),
-          ),
-        );
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF212529),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
