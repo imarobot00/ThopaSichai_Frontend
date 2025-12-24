@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'device_list_screen.dart';
-import 'environmental_details_screen.dart';
+import 'soil_moisture_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -145,11 +145,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(
               children: [
                 Expanded(
-                  child: _buildEnvironmentCard(
-                    'Soil Moisture',
-                    '65%',
-                    Icons.water_outlined,
-                    const Color(0xFF7DC2FF),
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SoilMoistureScreen(),
+                        ),
+                      );
+                    },
+                    child: _buildEnvironmentCard(
+                      'Soil Moisture',
+                      '65%',
+                      Icons.water_outlined,
+                      const Color(0xFF7DC2FF),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -292,11 +302,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => EnvironmentalDetailsScreen(
-              sensorType: label,
-              currentValue: value,
-              icon: icon,
-            ),
+            builder: (context) => const SoilMoistureScreen(),
           ),
         );
       },
