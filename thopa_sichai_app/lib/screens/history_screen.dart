@@ -23,6 +23,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _fetchHistory() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = '';
@@ -30,26 +31,41 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://192.168.16.112:8000/api/soil-moisture/'),
-      );
+        Uri.parse('http://192.168.16.112:8000/api/data/?page_size=100&ordering=-timestamp'),
+      ).timeout(const Duration(seconds: 20));
 
+      if (!mounted) return;
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        setState(() {
-          _historyData = data['data']['records'] ?? [];
-          _isLoading = false;
-        });
+        // API returns {"success": true, "data": {"records": [...]}}
+        List records = [];
+        if (data['data'] != null && data['data']['records'] != null) {
+          records = data['data']['records'];
+        } else if (data['results'] != null) {
+          records = data['results'];
+        }
+        if (mounted) {
+          setState(() {
+            _historyData = records;
+            _isLoading = false;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Failed to load history';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to load history';
+          _errorMessage = 'Error: $e';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error: $e';
-        _isLoading = false;
-      });
     }
   }
 

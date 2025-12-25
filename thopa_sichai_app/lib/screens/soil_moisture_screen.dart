@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class SoilMoistureScreen extends StatefulWidget {
   const SoilMoistureScreen({super.key});
@@ -15,6 +16,9 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   String _selectedPeriod = '24H';
+  
+  // Use the same IP for both web and mobile
+  static const String _baseUrl = 'http://192.168.16.112:8000';
 
   @override
   void initState() {
@@ -23,33 +27,52 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
   }
 
   Future<void> _fetchMoistureData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
     try {
+      // Fetch more data and order by timestamp descending to get most recent first
       final response = await http.get(
-        Uri.parse('http://192.168.16.112:8000/api/soil-moisture/'),
-      );
+        Uri.parse('$_baseUrl/api/data/?page_size=200&ordering=-timestamp'),
+      ).timeout(const Duration(seconds: 20));
 
+      if (!mounted) return;
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        setState(() {
-          _moistureData = data['data']['records'] ?? [];
-          _isLoading = false;
-        });
+        // API returns {"success": true, "data": {"records": [...]}}
+        List records = [];
+        if (data is List) {
+          records = data;
+        } else if (data['data'] != null && data['data']['records'] != null) {
+          records = data['data']['records'];
+        } else if (data['results'] != null) {
+          records = data['results'];
+        }
+        if (mounted) {
+          setState(() {
+            _moistureData = records;
+            _isLoading = false;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Failed to load data: ${response.statusCode}';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to load data: ${response.statusCode}';
+          _errorMessage = 'Error: $e';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error: $e';
-        _isLoading = false;
-      });
     }
   }
 
@@ -86,7 +109,126 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
     return min;
   }
 
+  double get _avgValue {
+    if (_moistureData.isEmpty) return 0;
+    double sum = 0;
+    int count = 0;
+    for (var item in _moistureData) {
+      try {
+        sum += double.parse(item['value'].toString());
+        count++;
+      } catch (e) {}
+    }
+    return count > 0 ? sum / count : 0;
+  }
+
+  // Get chart data - show all data from oldest (left) to newest (right)
   List<FlSpot> _getChartData() {
+    if (_moistureData.isEmpty) return [];
+    List<FlSpot> spots = [];
+    
+    // Filter data based on selected period
+    List<dynamic> filteredData = _filterDataByPeriod();
+    
+    // Sort by timestamp ascending (oldest first for left-to-right chart)
+    filteredData.sort((a, b) {
+      try {
+        final aTime = DateTime.parse(a['timestamp'] ?? a['created_at'] ?? '');
+        final bTime = DateTime.parse(b['timestamp'] ?? b['created_at'] ?? '');
+        return aTime.compareTo(bTime);
+      } catch (_) {
+        return 0;
+      }
+    });
+    
+    // Create spots for chart (limit to 100 for performance)
+    final dataToShow = filteredData.length > 100 
+        ? filteredData.sublist(filteredData.length - 100) 
+        : filteredData;
+    
+    for (int i = 0; i < dataToShow.length; i++) {
+      try {
+        double value = double.parse(dataToShow[i]['value'].toString());
+        spots.add(FlSpot(i.toDouble(), value));
+      } catch (e) {}
+    }
+    return spots;
+  }
+  
+  // Filter data by selected time period
+  List<dynamic> _filterDataByPeriod() {
+    if (_moistureData.isEmpty) return [];
+    
+    final now = DateTime.now();
+    Duration? duration;
+    
+    switch (_selectedPeriod) {
+      case '24H':
+        duration = const Duration(hours: 24);
+        break;
+      case '7D':
+        duration = const Duration(days: 7);
+        break;
+      case '30D':
+        duration = const Duration(days: 30);
+        break;
+      case 'All Time':
+      default:
+        return List.from(_moistureData);
+    }
+    
+    final cutoff = now.subtract(duration);
+    return _moistureData.where((item) {
+      try {
+        final timestamp = DateTime.parse(item['timestamp'] ?? item['created_at'] ?? '');
+        return timestamp.isAfter(cutoff);
+      } catch (_) {
+        return true;
+      }
+    }).toList();
+  }
+
+  // Get timestamps for X-axis labels - matches _getChartData order
+  List<String> _getTimeLabels() {
+    if (_moistureData.isEmpty) return [];
+    List<String> labels = [];
+    
+    // Filter data based on selected period
+    List<dynamic> filteredData = _filterDataByPeriod();
+    
+    // Sort by timestamp ascending (oldest first)
+    filteredData.sort((a, b) {
+      try {
+        final aTime = DateTime.parse(a['timestamp'] ?? a['created_at'] ?? '');
+        final bTime = DateTime.parse(b['timestamp'] ?? b['created_at'] ?? '');
+        return aTime.compareTo(bTime);
+      } catch (_) {
+        return 0;
+      }
+    });
+    
+    // Limit to last 100 like chart data
+    final dataToShow = filteredData.length > 100 
+        ? filteredData.sublist(filteredData.length - 100) 
+        : filteredData;
+    
+    for (int i = 0; i < dataToShow.length; i++) {
+      try {
+        final timestamp = dataToShow[i]['timestamp'] ?? dataToShow[i]['created_at'];
+        if (timestamp != null) {
+          final dt = DateTime.parse(timestamp);
+          labels.add('${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}');
+        } else {
+          labels.add('');
+        }
+      } catch (e) {
+        labels.add('');
+      }
+    }
+    return labels;
+  }
+
+  List<FlSpot> _getChartDataOld() {
     if (_moistureData.isEmpty) return [];
     List<FlSpot> spots = [];
     for (int i = 0; i < _moistureData.length; i++) {
@@ -196,10 +338,29 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
                           ),
                           const SizedBox(height: 32),
 
+                          // Chart Title
+                          const Text(
+                            'Moisture Readings Over Time',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_moistureData.length} readings',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
                           // Chart
                           Container(
-                            height: 200,
-                            padding: const EdgeInsets.all(16),
+                            height: 280,
+                            padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
                             decoration: BoxDecoration(
                               color: const Color(0xFF212529),
                               borderRadius: BorderRadius.circular(16),
@@ -218,7 +379,53 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
                                   },
                                 ),
                                 titlesData: FlTitlesData(
-                                  show: false,
+                                  show: true,
+                                  bottomTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true,
+                                      reservedSize: 30,
+                                      interval: (_getChartData().length / 5).clamp(1, 10).toDouble(),
+                                      getTitlesWidget: (value, meta) {
+                                        final labels = _getTimeLabels();
+                                        final idx = value.toInt();
+                                        if (idx >= 0 && idx < labels.length) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(top: 8),
+                                            child: Text(
+                                              labels[idx],
+                                              style: TextStyle(
+                                                color: Colors.grey.shade500,
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                        return const Text('');
+                                      },
+                                    ),
+                                  ),
+                                  leftTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true,
+                                      reservedSize: 40,
+                                      interval: 25,
+                                      getTitlesWidget: (value, meta) {
+                                        return Text(
+                                          '${value.toInt()}%',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade500,
+                                            fontSize: 10,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  topTitles: const AxisTitles(
+                                    sideTitles: SideTitles(showTitles: false),
+                                  ),
+                                  rightTitles: const AxisTitles(
+                                    sideTitles: SideTitles(showTitles: false),
+                                  ),
                                 ),
                                 borderData: FlBorderData(show: false),
                                 minY: 0,
@@ -228,21 +435,33 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
                                     spots: _getChartData(),
                                     isCurved: true,
                                     color: const Color(0xFF4FC3F7),
-                                    barWidth: 3,
+                                    barWidth: 2,
                                     isStrokeCapRound: true,
-                                    dotData: FlDotData(
+                                    dotData: const FlDotData(show: false),
+                                    belowBarData: BarAreaData(
                                       show: true,
-                                      getDotPainter: (spot, percent, barData, index) {
-                                        return FlDotCirclePainter(
-                                          radius: 4,
-                                          color: const Color(0xFF4FC3F7),
-                                          strokeWidth: 0,
-                                        );
-                                      },
+                                      color: const Color(0xFF4FC3F7).withOpacity(0.2),
                                     ),
-                                    belowBarData: BarAreaData(show: false),
                                   ),
                                 ],
+                                lineTouchData: LineTouchData(
+                                  touchTooltipData: LineTouchTooltipData(
+                                    getTooltipItems: (touchedSpots) {
+                                      return touchedSpots.map((spot) {
+                                        final labels = _getTimeLabels();
+                                        final idx = spot.x.toInt();
+                                        final time = idx < labels.length ? labels[idx] : '';
+                                        return LineTooltipItem(
+                                          '${spot.y.toStringAsFixed(1)}%\n$time',
+                                          const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        );
+                                      }).toList();
+                                    },
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -278,22 +497,129 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
                                   'High',
                                   '${_highValue.toInt()}%',
                                   Icons.arrow_upward,
+                                  Colors.red,
                                 ),
                               ),
-                              const SizedBox(width: 16),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _statCard(
+                                  'Average',
+                                  '${_avgValue.toInt()}%',
+                                  Icons.show_chart,
+                                  Colors.blue,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: _statCard(
                                   'Low',
                                   '${_lowValue.toInt()}%',
                                   Icons.arrow_downward,
+                                  Colors.orange,
                                 ),
                               ),
                             ],
                           ),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Recent Readings List
+                          const Text(
+                            'Recent Readings',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ..._buildRecentReadingsList(),
                         ],
                       ),
                     ),
     );
+  }
+
+  List<Widget> _buildRecentReadingsList() {
+    final recent = _moistureData.take(10).toList();
+    return recent.map((item) {
+      final value = double.tryParse(item['value'].toString()) ?? 0;
+      final timestamp = item['timestamp'] ?? item['created_at'];
+      final nodeId = item['nodeid'] ?? 'Unknown';
+      String timeStr = '';
+      if (timestamp != null) {
+        try {
+          final dt = DateTime.parse(timestamp);
+          timeStr = '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+        } catch (e) {}
+      }
+      
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF212529),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _getMoistureColor(value).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Text(
+                  '${value.toInt()}%',
+                  style: TextStyle(
+                    color: _getMoistureColor(value),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Node: $nodeId',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.water_drop,
+              color: _getMoistureColor(value),
+              size: 20,
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
+
+  Color _getMoistureColor(double value) {
+    if (value < 30) return Colors.red;
+    if (value < 50) return Colors.orange;
+    if (value < 70) return Colors.green;
+    return Colors.blue;
   }
 
   Widget _periodButton(String period) {
@@ -324,41 +650,36 @@ class _SoilMoistureScreenState extends State<SoilMoistureScreen> {
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon) {
+  Widget _statCard(String label, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF212529),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
+      child: Column(
         children: [
           Icon(
             icon,
-            color: label == 'High' ? Colors.blue : Colors.blue,
-            size: 20,
+            color: color,
+            size: 24,
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
