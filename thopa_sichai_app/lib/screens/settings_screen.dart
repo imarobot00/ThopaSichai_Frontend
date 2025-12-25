@@ -246,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   _buildInfoRow('App Version', '1.0.0'),
                   const Divider(height: 24, color: Colors.grey),
-                  _buildInfoRow('API Server', '127.0.0.1:8000'),
+                  _buildInfoRow('API Server', '192.168.16.112:8000'),
                   const Divider(height: 24, color: Colors.grey),
                   _buildInfoRow('Project', 'Thopa Sichai'),
                 ],

@@ -28,7 +28,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/soil-moisture/'),
+        Uri.parse('http://192.168.16.112:8000/api/soil-moisture/'),
       );
 
       if (response.statusCode == 200) {

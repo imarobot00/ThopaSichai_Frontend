@@ -3,7 +3,10 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Update this with your laptop's IP address
-  static const String baseUrl = 'http://10.164.63.195:8000';
+  static const String baseUrl = 'http://192.168.16.112:8000';
+  
+  // Timeout duration for API requests (important for slow college WiFi)
+  static const Duration requestTimeout = Duration(seconds: 10);
   
   // Authentication endpoints
   static const String loginEndpoint = '/api/auth/login/';
@@ -26,18 +29,28 @@ class ApiService {
           'username': username,
           'password': password,
         }),
+      ).timeout(
+        requestTimeout,
+        onTimeout: () {
+          throw Exception('Connection timeout. Check your network or try mobile hotspot.');
+        },
       );
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else if (response.statusCode == 401) {
         final error = jsonDecode(response.body);
-        throw Exception(error['error'] ?? 'Invalid credentials');
+        throw Exception(error['error'] ?? 'Invalid username or password');
       } else {
-        throw Exception('Login failed: ${response.statusCode}');
+        throw Exception('Login failed (${response.statusCode}). Server may be unreachable.');
       }
+    } on Exception {
+      rethrow;
     } catch (e) {
-      throw Exception('Network error: $e');
+      if (e.toString().contains('SocketException') || e.toString().contains('Failed host lookup')) {
+        throw Exception('Cannot reach server. Check if you\'re on the right network.');
+      }
+      throw Exception('Network error: ${e.toString().replaceAll('Exception: ', '')}');
     }
   }
 
@@ -64,6 +77,11 @@ class ApiService {
           if (firstName != null) 'first_name': firstName,
           if (lastName != null) 'last_name': lastName,
         }),
+      ).timeout(
+        requestTimeout,
+        onTimeout: () {
+          throw Exception('Connection timeout. Check your network.');
+        },
       );
 
       if (response.statusCode == 201) {
@@ -97,7 +115,7 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Token $token',
         },
-      );
+      ).timeout(requestTimeout);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -121,7 +139,7 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Token $token',
         },
-      );
+      ).timeout(requestTimeout);
 
       if (response.statusCode != 200) {
         throw Exception('Logout failed: ${response.statusCode}');
