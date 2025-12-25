@@ -371,18 +371,18 @@ class ApiService {
     }
   }
 
-  /// Set threshold configuration
+  /// Set threshold configuration for a node
   /// POST /api/config/thresholds/set/
-  static Future<Map<String, dynamic>> setThresholds({
-    String? nodeid,
-    double? lowThreshold,
-    double? highThreshold,
+  /// threshold: Motor turns ON when moisture value drops below this threshold
+  static Future<Map<String, dynamic>> setThreshold({
+    required String nodeid,
+    required double threshold,
   }) async {
     try {
-      final body = <String, dynamic>{};
-      if (nodeid != null) body['nodeid'] = nodeid;
-      if (lowThreshold != null) body['low_threshold'] = lowThreshold;
-      if (highThreshold != null) body['high_threshold'] = highThreshold;
+      final body = {
+        'nodeid': nodeid,
+        'threshold': threshold,
+      };
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/config/thresholds/set/'),
@@ -393,7 +393,7 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      throw Exception('Failed to set thresholds');
+      throw Exception('Failed to set threshold');
     } catch (e) {
       throw Exception('Network error: $e');
     }

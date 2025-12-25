@@ -299,14 +299,18 @@ class _MotorsScreenState extends State<MotorsScreen> {
 
     if (result == true) {
       try {
-        await ApiService.setThresholds(
-          lowThreshold: double.tryParse(lowController.text),
-          highThreshold: double.tryParse(highController.text),
-        );
+        // Note: The API uses single threshold per node, not low/high
+        // This dialog is simplified - navigate to Settings for full control
+        final threshold = double.tryParse(lowController.text) ?? 50.0;
+        // Apply to first node if available
+        final nodes = await ApiService.getUniqueNodeIds();
+        if (nodes.isNotEmpty) {
+          await ApiService.setThreshold(nodeid: nodes.first, threshold: threshold);
+        }
         _loadData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Thresholds updated'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('Threshold updated'), backgroundColor: Colors.green),
           );
         }
       } catch (e) {
