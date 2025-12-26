@@ -23,6 +23,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _systemMode = 'MANUAL';
   bool _isLoading = true;
   String? _errorMessage;
+  bool _ultrasonicAlertShown = false; // Track if alert has been shown
 
   // Stats
   double _latestMoisture = 0.0;
@@ -35,6 +36,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+  }
+
+  void _showUltrasonicAlert() {
+    if (_ultrasonicAlertShown) return; // Don't show again if already shown
+    _ultrasonicAlertShown = true;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF212529),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 8),
+            Text(
+              'Sensor Alert',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Ultrasonic sensor value has exceeded the threshold.\nPlease turn off the ultrasonic motor.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4CAF50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _checkUltrasonicThreshold(List<dynamic> readings) async {
+    try {
+      // Get thresholds
+      final thresholdsResponse = await ApiService.getThresholds();
+      if (thresholdsResponse['success'] != true || thresholdsResponse['data'] == null) return;
+      
+      final thresholds = thresholdsResponse['data']['thresholds'] as List<dynamic>? ?? [];
+      
+      // Find us00 threshold
+      double? us00Threshold;
+      for (var t in thresholds) {
+        if (t['nodeid'] == 'us00' || t['nodeid'] == 'us01') {
+          us00Threshold = (t['threshold'] as num?)?.toDouble();
+          break;
+        }
+      }
+      
+      if (us00Threshold == null) return;
+      
+      // Find latest us00 reading
+      for (var reading in readings) {
+        final nodeId = reading['nodeid']?.toString() ?? '';
+        if (nodeId == 'us00' || nodeId == 'us01') {
+          final value = double.tryParse(reading['value'].toString()) ?? 0;
+          if (value >= us00Threshold && mounted) {
+            _showUltrasonicAlert();
+          }
+          break;
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadDashboardData() async {
@@ -103,6 +177,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _motorsOff = off;
           _isLoading = false;
         });
+        
+        // Check ultrasonic sensor threshold
+        _checkUltrasonicThreshold(readings);
       }
     } catch (e) {
       if (mounted) {
